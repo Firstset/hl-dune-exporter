@@ -1,5 +1,5 @@
 [package]
-name = "hyperliquid_to_dune"
+name = "hl_dune_exporter"
 version = "0.1.0"
 edition = "2021"
 
