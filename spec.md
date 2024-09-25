@@ -67,6 +67,7 @@ curl --request POST \
 }'
 ```
 
+Available options for the type: varchar, integer, double, boolean, int256, uint256, varbinary, timestamp 
 
 ### Insert data
 
