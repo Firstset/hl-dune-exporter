@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::info;
 use reqwest::Client;
 use serde_json::json;
 
@@ -107,6 +108,8 @@ impl DuneApi {
             .collect::<Vec<String>>()
             .join("\n");
 
+        info!("Inserting {} trades to Dune...", trades.len());
+
         // Send the request to insert data
         let response = self.client
             .post(format!("{}/table/{}/{}/insert", DUNE_API_URL, self.config.dune_user_namespace, self.config.dune_table_name))
@@ -119,7 +122,7 @@ impl DuneApi {
 
         // Check if the request was successful
         if response.status().is_success() {
-            println!("Data inserted successfully");
+            info!("Data inserted successfully");
             Ok(())
         } else {
             let error_message = response.text().await.context("Failed to read error response")?;
