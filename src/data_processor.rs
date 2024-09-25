@@ -29,6 +29,7 @@ pub struct Trade {
 }
 
 /// Parses the trade_dir_override field from the raw trade data.
+/// We did this because the field is usually a string but sometimes an object.
 ///
 /// # Arguments
 ///

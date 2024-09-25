@@ -15,7 +15,6 @@ pub async fn process_and_insert_data(
     let mut batch_day = start_time.date_naive();
     let end_date = end_time.date_naive();
 
-    // TO-DO remove equal sign
     while batch_day <= end_date { 
         info!("Processing data for {}", batch_day);
 
