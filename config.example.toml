@@ -2,4 +2,4 @@ dune_api_key = "your_dune_api_key_here"
 hyperliquid_data_dir = "/path/to/hl/data/node_trades/hourly"
 dune_user_namespace = "your_dune_username"
 dune_table_name = "hyperliquid_trades"
-look_back_period = 30
+look_back_period_days = 30

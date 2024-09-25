@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
 
     // Calculate date range
     let end_time = Utc::now();
-    let start_time = end_time - Duration::days(config.look_back_period);
+    let start_time = end_time - Duration::days(config.look_back_period_days);
 
     info!("Processing data from {} to {}", start_time, end_time);
 
