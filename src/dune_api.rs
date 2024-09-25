@@ -82,8 +82,29 @@ impl DuneApi {
     pub async fn insert_data(&self, trades: Vec<Trade>) -> Result<()> {
         // Convert trades to NDJSON format
         let ndjson = trades.iter()
-            .map(|trade| serde_json::to_string(trade))
-            .collect::<Result<Vec<String>, _>>()?
+            .map(|trade| {
+                serde_json::json!({
+                    "coin": trade.coin,
+                    "side": trade.side,
+                    "time": trade.time.to_rfc3339(),
+                    "px": trade.px,
+                    "sz": trade.sz,
+                    "hash": trade.hash,
+                    "trade_dir_override": trade.trade_dir_override,
+                    "user_a": trade.user_a,
+                    "start_pos_a": trade.start_pos_a,
+                    "oid_a": trade.oid_a,
+                    "twap_id_a": trade.twap_id_a,
+                    "cloid_a": trade.cloid_a,
+                    "user_b": trade.user_b,
+                    "start_pos_b": trade.start_pos_b,
+                    "oid_b": trade.oid_b,
+                    "twap_id_b": trade.twap_id_b,
+                    "cloid_b": trade.cloid_b,
+                })
+                .to_string()
+            })
+            .collect::<Vec<String>>()
             .join("\n");
 
         // Send the request to insert data

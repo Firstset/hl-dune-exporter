@@ -15,17 +15,16 @@ pub struct Trade {
     pub sz: f64,
     pub hash: String,
     pub trade_dir_override: String,
-    pub side_info: Vec<SideInfo>,
-}
-
-/// Represents additional information for each side of a trade.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SideInfo {
-    pub user: String,
-    pub start_pos: String,
-    pub oid: u64,
-    pub twap_id: Option<String>,
-    pub cloid: Option<String>,
+    pub user_a: String,
+    pub start_pos_a: f64,
+    pub oid_a: u64,
+    pub twap_id_a: Option<String>,
+    pub cloid_a: Option<String>,
+    pub user_b: String,
+    pub start_pos_b: f64,
+    pub oid_b: u64,
+    pub twap_id_b: Option<String>,
+    pub cloid_b: Option<String>,
 }
 
 /// Processes trade data from the Hyperliquid Node data directory.
@@ -104,10 +103,35 @@ fn process_trade_file(file_path: &Path, trades: &mut Vec<Trade>, start_time: Dat
 
     for line in reader.lines() {
         let line = line?;
-        let trade: Trade = serde_json::from_str(&line).context("Failed to parse trade JSON")?;
-
-        if trade.time >= start_time && trade.time <= end_time {
-            trades.push(trade);
+        let raw_trade: serde_json::Value = serde_json::from_str(&line).context("Failed to parse trade JSON")?;
+        
+        if let Some(side_info) = raw_trade["side_info"].as_array() {
+            if side_info.len() == 2 {
+                let time = DateTime::parse_from_rfc3339(raw_trade["time"].as_str().unwrap())?.with_timezone(&Utc);
+                
+                if time >= start_time && time <= end_time {
+                    let trade = Trade {
+                        coin: raw_trade["coin"].as_str().unwrap().to_string(),
+                        side: raw_trade["side"].as_str().unwrap().to_string(),
+                        time,
+                        px: raw_trade["px"].as_str().unwrap().parse()?,
+                        sz: raw_trade["sz"].as_str().unwrap().parse()?,
+                        hash: raw_trade["hash"].as_str().unwrap().to_string(),
+                        trade_dir_override: raw_trade["trade_dir_override"].as_str().unwrap().to_string(),
+                        user_a: side_info[0]["user"].as_str().unwrap().to_string(),
+                        start_pos_a: side_info[0]["start_pos"].as_str().unwrap().parse()?,
+                        oid_a: side_info[0]["oid"].as_u64().unwrap(),
+                        twap_id_a: side_info[0]["twap_id"].as_str().map(String::from),
+                        cloid_a: side_info[0]["cloid"].as_str().map(String::from),
+                        user_b: side_info[1]["user"].as_str().unwrap().to_string(),
+                        start_pos_b: side_info[1]["start_pos"].as_str().unwrap().parse()?,
+                        oid_b: side_info[1]["oid"].as_u64().unwrap(),
+                        twap_id_b: side_info[1]["twap_id"].as_str().map(String::from),
+                        cloid_b: side_info[1]["cloid"].as_str().map(String::from),
+                    };
+                    trades.push(trade);
+                }
+            }
         }
     }
 
