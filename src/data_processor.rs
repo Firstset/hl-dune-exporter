@@ -28,6 +28,28 @@ pub struct Trade {
     pub cloid_b: Option<String>,
 }
 
+/// Parses the trade_dir_override field from the raw trade data.
+///
+/// # Arguments
+///
+/// * `raw_trade` - A JSON Value containing the raw trade data.
+///
+/// # Returns
+///
+/// A String representing the parsed trade_dir_override value.
+fn parse_trade_dir_override(raw_trade: &serde_json::Value) -> String {
+    match &raw_trade["trade_dir_override"] {
+        serde_json::Value::String(s) => s.to_string(),
+        serde_json::Value::Object(obj) => {
+            obj.iter()
+                .next()
+                .map(|(k, v)| format!("{}:{}", k, v))
+                .unwrap_or_else(|| "Unknown".to_string())
+        },
+        _ => "".to_string(),
+    }
+}
+
 /// Parses a single trade from raw JSON data.
 ///
 /// # Arguments
@@ -47,7 +69,7 @@ fn format_single_trade(raw_trade: &serde_json::Value, side_info: &[serde_json::V
         px: raw_trade["px"].as_str().context("Missing 'px' field")?.parse().context("Failed to parse 'px'")?,
         sz: raw_trade["sz"].as_str().context("Missing 'sz' field")?.parse().context("Failed to parse 'sz'")?,
         hash: raw_trade["hash"].as_str().context("Missing 'hash' field")?.to_string(),
-        trade_dir_override: raw_trade["trade_dir_override"].as_str().context("Missing 'trade_dir_override' field")?.to_string(),
+        trade_dir_override: parse_trade_dir_override(raw_trade),
         user_a: side_info[0]["user"].as_str().context("Missing 'user' in side_info[0]")?.to_string(),
         start_pos_a: side_info[0]["start_pos"].as_str().context("Missing 'start_pos' in side_info[0]")?.parse().context("Failed to parse 'start_pos_a'")?,
         oid_a: side_info[0]["oid"].as_u64().context("Missing or invalid 'oid' in side_info[0]")?,
