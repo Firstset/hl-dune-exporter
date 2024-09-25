@@ -10,8 +10,6 @@ use std::fs;
 pub struct Config {
     /// The API key for authenticating with the Dune API.
     pub dune_api_key: String,
-    /// The base URL for the Dune API.
-    pub dune_api_url: String,
     /// The directory path where Hyperliquid Node data is stored.
     pub hyperliquid_data_dir: String,
     /// The user namespace in Dune where the table will be created.
