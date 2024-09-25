@@ -16,6 +16,8 @@ pub struct Config {
     pub dune_user_namespace: String,
     /// The name of the table to be created in Dune.
     pub dune_table_name: String,
+    /// The look back period in days.
+    pub look_back_period: i64,
 }
 
 /// Loads the configuration from a TOML file.

@@ -1,12 +1,15 @@
 use anyhow::{Context, Result};
+use chrono::{Duration, Utc};
 use clap::Parser;
 use log::info;
-use chrono::{Utc, Duration};
 
 mod config;
 mod data_processor;
 mod dune_api;
 mod schemas;
+mod batching;
+
+use dune_api::DuneApi;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -17,32 +20,36 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize logging
     env_logger::init();
 
+    // Parse command line arguments
     let cli = Cli::parse();
-    let config = config::load_config(&cli.config)?;
 
     info!("Starting Hyperliquid to Dune export");
 
-    // Create DuneApi instance
-    let dune_api = dune_api::DuneApi::new(config.clone());
+    // Load configuration
+    let config = config::load_config(&cli.config)
+        .context("Failed to load configuration")?;
 
-    // Create the table in Dune (if it doesn't exist)
-    dune_api.create_table().await.context("Failed to create table in Dune")?;
+    // Initialize Dune API client
+    let dune_api = DuneApi::new(config.clone());
 
-    // Calculate time range for the last 24 hours
+    // Clear the table or create if it doesn't exist
+    info!("Clearing or creating the table...");
+    dune_api.clear_or_create_table().await
+        .context("Failed to clear or create the table")?;
+
+    // Calculate date range
     let end_time = Utc::now();
-    let start_time = end_time - Duration::hours(24);
+    let start_time = end_time - Duration::days(config.look_back_period);
 
-    // Process data for the last 24 hours
-    let trades = data_processor::process_data(&config.hyperliquid_data_dir, start_time, end_time)
-        .context("Failed to process trade data")?;
+    info!("Processing data from {} to {}", start_time, end_time);
 
-    info!("Processed {} trades", trades.len());
+    // Process and insert data in daily batches
+    batching::process_and_insert_data(&config, &dune_api, start_time, end_time).await
+        .context("Failed to process and insert data")?;
 
-    // Send data to Dune API
-    dune_api.insert_data(trades).await.context("Failed to insert data into Dune")?;
-
-    info!("Export completed successfully");
+    info!("Data export completed successfully");
     Ok(())
 }

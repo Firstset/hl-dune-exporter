@@ -129,4 +129,57 @@ impl DuneApi {
             anyhow::bail!("Failed to insert data: {}", error_message)
         }
     }
+
+    /// Clears all data from the table in the Dune database.
+    ///
+    /// This function sends a POST request to the Dune API to clear all data
+    /// from the previously created table.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or containing an error if the operation failed.
+    pub async fn clear_table(&self) -> Result<()> {
+        let url = format!(
+            "{}/table/{}/{}/clear",
+            DUNE_API_URL,
+            self.config.dune_user_namespace,
+            self.config.dune_table_name
+        );
+
+        let response = self.client
+            .post(&url)
+            .header("X-DUNE-API-KEY", &self.config.dune_api_key)
+            .send()
+            .await
+            .context("Failed to send clear table request")?;
+
+        if response.status().is_success() {
+            info!("Table cleared successfully");
+            Ok(())
+        } else {
+            let error_message = response.text().await.context("Failed to read error response")?;
+            anyhow::bail!("Failed to clear table: {}", error_message)
+        }
+    }
+
+    /// Clears the table if it exists, or creates it if it doesn't.
+    ///
+    /// This function first attempts to clear the table. If that fails (likely because
+    /// the table doesn't exist), it tries to create the table.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or containing an error if both operations failed.
+    pub async fn clear_or_create_table(&self) -> Result<()> {
+        match self.clear_table().await {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                info!("Failed to clear table. Attempting to create it...");
+                match self.create_table().await {
+                    Ok(_) => Ok(()),
+                    Err(e) => anyhow::bail!("Cannot clear or create table: {}", e),
+                }
+            }
+        }
+    }
 }

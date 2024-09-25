@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
+use log::info;
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, NaiveDateTime, Timelike};
-use std::fs::{self, File};
+use chrono::{NaiveDate, DateTime, Utc, NaiveDateTime};
+use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
@@ -27,6 +28,39 @@ pub struct Trade {
     pub cloid_b: Option<String>,
 }
 
+/// Parses a single trade from raw JSON data.
+///
+/// # Arguments
+///
+/// * `raw_trade` - A JSON Value containing the raw trade data.
+/// * `side_info` - A slice of JSON Values containing side information.
+/// * `time` - The parsed DateTime<Utc> for the trade.
+///
+/// # Returns
+///
+/// A Result containing the parsed Trade struct if successful, or an error if parsing fails.
+fn format_single_trade(raw_trade: &serde_json::Value, side_info: &[serde_json::Value], time: DateTime<Utc>) -> Result<Trade> {
+    Ok(Trade {
+        coin: raw_trade["coin"].as_str().context("Missing 'coin' field")?.to_string(),
+        side: raw_trade["side"].as_str().context("Missing 'side' field")?.to_string(),
+        time,
+        px: raw_trade["px"].as_str().context("Missing 'px' field")?.parse().context("Failed to parse 'px'")?,
+        sz: raw_trade["sz"].as_str().context("Missing 'sz' field")?.parse().context("Failed to parse 'sz'")?,
+        hash: raw_trade["hash"].as_str().context("Missing 'hash' field")?.to_string(),
+        trade_dir_override: raw_trade["trade_dir_override"].as_str().context("Missing 'trade_dir_override' field")?.to_string(),
+        user_a: side_info[0]["user"].as_str().context("Missing 'user' in side_info[0]")?.to_string(),
+        start_pos_a: side_info[0]["start_pos"].as_str().context("Missing 'start_pos' in side_info[0]")?.parse().context("Failed to parse 'start_pos_a'")?,
+        oid_a: side_info[0]["oid"].as_u64().context("Missing or invalid 'oid' in side_info[0]")?,
+        twap_id_a: side_info[0]["twap_id"].as_str().map(String::from),
+        cloid_a: side_info[0]["cloid"].as_str().map(String::from),
+        user_b: side_info[1]["user"].as_str().context("Missing 'user' in side_info[1]")?.to_string(),
+        start_pos_b: side_info[1]["start_pos"].as_str().context("Missing 'start_pos' in side_info[1]")?.parse().context("Failed to parse 'start_pos_b'")?,
+        oid_b: side_info[1]["oid"].as_u64().context("Missing or invalid 'oid' in side_info[1]")?,
+        twap_id_b: side_info[1]["twap_id"].as_str().map(String::from),
+        cloid_b: side_info[1]["cloid"].as_str().map(String::from),
+    })
+}
+
 /// Processes trade data from the Hyperliquid Node data directory.
 ///
 /// This function reads trade data files within the specified time range,
@@ -41,42 +75,30 @@ pub struct Trade {
 /// # Returns
 ///
 /// A Result containing a vector of Trade structs if successful, or an error if not.
-pub fn process_data(data_dir: &str, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Trade>> {
+pub fn process_data(data_dir: &str, batch_day: NaiveDate) -> Result<Vec<Trade>> {
     let mut trades = Vec::new();
 
-    // Iterate through the date folders
-    for date_entry in fs::read_dir(data_dir)? {
-        let date_path = date_entry?.path();
-        if !date_path.is_dir() {
+    info!("Processing data for {} on dir {}", batch_day, data_dir);
+
+    let date_folder = batch_day.format("%Y%m%d").to_string();
+    let date_path = Path::new(data_dir).join(&date_folder);
+
+    if !date_path.is_dir() {
+        info!("No data found for {}", batch_day);
+        return Ok(trades);
+    }
+
+    // Iterate through the hour files
+    for hour in 0..24 {
+        let hour_file = date_path.join(hour.to_string());
+        if !hour_file.is_file() {
             continue;
         }
 
-        let date_str = date_path.file_name().unwrap().to_str().unwrap();
-        let date = NaiveDateTime::parse_from_str(&format!("{}T00:00:00", date_str), "%Y%m%dT%H:%M:%S")?;
+        info!("Reading hour file: {}", hour_file.display());
 
-        // Iterate through the hour folders
-        for hour_entry in fs::read_dir(date_path)? {
-            let hour_path = hour_entry?.path();
-            if !hour_path.is_dir() {
-                continue;
-            }
-
-            let hour_str = hour_path.file_name().unwrap().to_str().unwrap();
-            let hour: u32 = hour_str.parse()?;
-            let folder_datetime = date.with_hour(hour).unwrap();
-            let folder_datetime_utc = DateTime::<Utc>::from_naive_utc_and_offset(folder_datetime, Utc);
-
-            // Skip if the folder is outside the time range
-            if folder_datetime_utc < start_time || folder_datetime_utc > end_time {
-                continue;
-            }
-
-            // Process the trade file in this hour folder
-            let file_path = hour_path.join("trades");
-            if file_path.exists() {
-                process_trade_file(&file_path, &mut trades, start_time, end_time)?;
-            }
-        }
+        // Process the trade file
+        process_trade_file(&hour_file, &mut trades, batch_day)?;
     }
 
     Ok(trades)
@@ -91,13 +113,12 @@ pub fn process_data(data_dir: &str, start_time: DateTime<Utc>, end_time: DateTim
 ///
 /// * `file_path` - The path to the trade file.
 /// * `trades` - A mutable reference to the vector of trades to add to.
-/// * `start_time` - The start of the time range to process.
-/// * `end_time` - The end of the time range to process.
+/// * `batch_day` - The date to filter trades by.
 ///
 /// # Returns
 ///
 /// A Result indicating success or an error if the file couldn't be read or parsed.
-fn process_trade_file(file_path: &Path, trades: &mut Vec<Trade>, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<()> {
+fn process_trade_file(file_path: &Path, trades: &mut Vec<Trade>, batch_day: NaiveDate) -> Result<()> {
     let file = File::open(file_path).context("Failed to open trade file")?;
     let reader = BufReader::new(file);
 
@@ -107,28 +128,16 @@ fn process_trade_file(file_path: &Path, trades: &mut Vec<Trade>, start_time: Dat
         
         if let Some(side_info) = raw_trade["side_info"].as_array() {
             if side_info.len() == 2 {
-                let time = DateTime::parse_from_rfc3339(raw_trade["time"].as_str().unwrap())?.with_timezone(&Utc);
+                let time_str = raw_trade["time"].as_str()
+                    .context(format!("Missing 'time' field on line {} in file {:?}", line, file_path))?;
                 
-                if time >= start_time && time <= end_time {
-                    let trade = Trade {
-                        coin: raw_trade["coin"].as_str().unwrap().to_string(),
-                        side: raw_trade["side"].as_str().unwrap().to_string(),
-                        time,
-                        px: raw_trade["px"].as_str().unwrap().parse()?,
-                        sz: raw_trade["sz"].as_str().unwrap().parse()?,
-                        hash: raw_trade["hash"].as_str().unwrap().to_string(),
-                        trade_dir_override: raw_trade["trade_dir_override"].as_str().unwrap().to_string(),
-                        user_a: side_info[0]["user"].as_str().unwrap().to_string(),
-                        start_pos_a: side_info[0]["start_pos"].as_str().unwrap().parse()?,
-                        oid_a: side_info[0]["oid"].as_u64().unwrap(),
-                        twap_id_a: side_info[0]["twap_id"].as_str().map(String::from),
-                        cloid_a: side_info[0]["cloid"].as_str().map(String::from),
-                        user_b: side_info[1]["user"].as_str().unwrap().to_string(),
-                        start_pos_b: side_info[1]["start_pos"].as_str().unwrap().parse()?,
-                        oid_b: side_info[1]["oid"].as_u64().unwrap(),
-                        twap_id_b: side_info[1]["twap_id"].as_str().map(String::from),
-                        cloid_b: side_info[1]["cloid"].as_str().map(String::from),
-                    };
+                let time = NaiveDateTime::parse_from_str(time_str, "%Y-%m-%dT%H:%M:%S%.3f")
+                    .context(format!("Failed to parse time '{}' on line {} in file {:?}", time_str, line, file_path))?;
+                let time = DateTime::<Utc>::from_naive_utc_and_offset(time, Utc);
+                
+                if time.date_naive() == batch_day {
+                    let trade = format_single_trade(&raw_trade, side_info, time)
+                        .context(format!("Failed to parse trade on line {} in file {:?}", line, file_path))?;
                     trades.push(trade);
                 }
             }

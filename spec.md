@@ -11,7 +11,9 @@ This project is a simple script to periodically export Hyperliquid Node data to 
 - Insert data in batch to Dune API
 - The configuration parameters listed in the Parameters section below are supported 
 - Configuration parameters are loaded from a config.toml file
-- The script is assumed to be run daily every day at the same time, so it should load the last 24h of data but avoid data from the current hour as it is not complete and we want to remain stateless
+- Running the script clears the data in the table before inserting new data
+- Data is inserted in daily batches
+- We backfill data from the current day to the look back period
 
 ## Parameters
 
@@ -19,6 +21,7 @@ This project is a simple script to periodically export Hyperliquid Node data to 
 - Hyperliquid Node data directory
 - Dune user namespace
 - Dune table name
+- Look back period in days
 
 ## Hyperliquid data format
 
@@ -82,3 +85,15 @@ curl --request POST \
 ```
 
 The `application/x-ndjson` content type is also accepted instead of `text/csv`, and in that case the data file should be a JSON file.
+
+### Clear data in table
+
+Sample request:
+
+```
+curl --request POST \
+  --url https://api.dune.com/api/v1/table/my_user/interest_rates/clear \
+  --header 'X-DUNE-API-KEY: <x-dune-api-key>'
+```
+
+Clearing data does not delete the table, it just removes all the rows in the table.
