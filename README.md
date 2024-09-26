@@ -1,18 +1,8 @@
 # Hyperliquid Node Dune Exporter
 
-This is a simple script to export Hyperliquid Node data to a Dune table.
+This is a simple script to export [Hyperliquid Node](https://github.com/hyperliquid-dex/node/) data to a Dune table.
 
 See [spec.md](spec.md) for more details.
-
-## Dependencies
-
-HL Node requires Ubuntu so need to:
-
-```
-sudo apt update
-sudo apt install build-essential pkg-config libssl-dev
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
 
 ## Configuration
 
@@ -24,6 +14,16 @@ The simplest way to run it is:
 
 ```
 cargo run --release
+```
+
+## Dependencies
+
+Besides the Hyperliquid Node requirement, Rust and a few libraries are necessary to build the binary:
+
+```
+sudo apt update
+sudo apt install build-essential pkg-config libssl-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 ## Deployment
